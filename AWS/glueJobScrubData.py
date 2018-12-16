@@ -61,6 +61,7 @@ result_s3_parquet_path = 's3://{}/{}_parquet'.format(result_bucket,database_name
 # user defined function to hash the email
 u_df0 = udf(lambda s: re.sub(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)",  lambda m: "{0}".format(hash(m.group(1))), s), StringType())
 u_df1 = udf(lambda x: "{0}".format(hash(x)), StringType())
+u_df2 =  udf(lambda x: x.replace('\n', ' '), StringType())
 
 # processing table1
 datasource0 = glueContext.create_dynamic_frame.from_catalog(database = database_name, table_name = "table1", transformation_ctx = "datasource0")
@@ -69,10 +70,12 @@ applymapping0 = ApplyMapping.apply(frame = datasource0, mappings = [("col1", "st
 df0 = applymapping0.toDF()
 # processing the data
 df0a = df0.withColumn("col0", lit(1)).select("col0", "col1", "col2", "col3", "col4","col5").withColumn("col3", u_df0("col3"))
+# Remove newline char from col4
+df0b = df0a.withColumn("col4", u_df2("col4"))
 # Converting dataframe to dynamicframe
-df0b = DynamicFrame.fromDF(df0a, glueContext, "df0b")
-datasink0 = glueContext.write_dynamic_frame.from_options(frame = df0b, connection_type = "s3", connection_options = {"path": result_s3_csv_path + "/table1"}, format = "csv", format_options = {"writeHeader": "true"}, transformation_ctx = "datasink0")
-resolvechoice0 = ResolveChoice.apply(frame = df0b, choice = "make_struct", transformation_ctx = "resolvechoice0")
+df0c = DynamicFrame.fromDF(df0b, glueContext, "df0c")
+datasink0 = glueContext.write_dynamic_frame.from_options(frame = df0c, connection_type = "s3", connection_options = {"path": result_s3_csv_path + "/table1"}, format = "csv", format_options = {"writeHeader": "true"}, transformation_ctx = "datasink0")
+resolvechoice0 = ResolveChoice.apply(frame = df0c, choice = "make_struct", transformation_ctx = "resolvechoice0")
 dropnullfields0 = DropNullFields.apply(frame = resolvechoice0, transformation_ctx = "dropnullfields0")
 datasinkpar0 = glueContext.write_dynamic_frame.from_options(frame = dropnullfields0, connection_type = "s3", connection_options = {"path": result_s3_parquet_path + "/table1"}, format = "parquet", transformation_ctx = "datasinkpar0")
 
