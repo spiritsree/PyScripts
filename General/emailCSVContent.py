@@ -24,6 +24,7 @@ def send_email(csv_file, email):
     First row will be taken as header.
     Mail will be sent as MIME text with both plaintext and html support.
     '''
+    from_email = "info@example.com"
     try:
         with open(csv_file, 'r') as csvfile:
             table_string = ''
@@ -50,12 +51,10 @@ def send_email(csv_file, email):
         print('I/O error in reading file ' + csv_file + "with error " + str(e))
         return 'Error'
 
-    me = "info@example.com"
-
     # Create message container - the correct MIME type is multipart/alternative.
     msg = MIMEMultipart('alternative')
     msg['Subject'] = "CSV Data"
-    msg['From'] = me
+    msg['From'] = from_email
     msg['To'] = email
 
     # Create the body of the message (a plain-text and an HTML version).
@@ -72,7 +71,7 @@ def send_email(csv_file, email):
     try:
         s = smtplib.SMTP('localhost')
         print('Sending email....')
-        s.sendmail(me, email, msg.as_string())
+        s.sendmail(from_email, email, msg.as_string())
         s.quit()
     except:
         print('Failed smtp connection with error ' + str(sys.exc_info()[1]))
