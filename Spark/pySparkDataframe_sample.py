@@ -7,7 +7,11 @@ run:
     spark-submit pySparkDataframe_sample.py
     OR
     python3 pySparkDataframe_sample.py
+
+NOTE: needs java 1.8
+    export JAVA_HOME=$(/usr/libexec/java_home -v 1.8)
 '''
+import os
 from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 from pyspark.context import SparkContext
@@ -27,6 +31,33 @@ def add_column_index(df):
   else:
     df_idx = df.rdd.zipWithIndex().map(lambda row: row[0] + (row[1],)).toDF(schema=new_schema)
   return df_idx
+
+def count_total(spark, csv_path):
+  '''
+  To count the number of rows in a list of files.
+
+  Avoid if id column is 'null'
+
+  ID column should exist
+  '''
+  count = 0
+  ncount = 0
+  csv_files = [f for f in os.listdir(csv_path) if f.endswith('.csv')]
+  print('Path: ' + csv_path + ' and Files: ' + str(csv_files) )
+  for f in csv_files:
+    full_path = csv_path + f
+    print(full_path)
+    df = spark.read.csv(full_path, header=True, quote='"', escape='"', multiLine=True)
+    # Collect all rows where 'id' column is not null
+    n = df.filter(df.id. isNull()).count()
+    if n > 0:
+      ncount += n
+      # Show the content of row with id 'null'
+      print(df.filter(df.id. isNull()).collect())
+    count += df.count()
+  print('Total row count = ' + str(count))
+  print('Total null count = ' + str(ncount))
+  print('Total valid rows = ' + str(count - ncount))
 
 
 def main():
@@ -58,8 +89,8 @@ def main():
     df2 = indexedDf0.join(indexedDf1, indexedDf1.idx == indexedDf0.idx,'inner').drop("idx")
     df2.write.csv("/tmp/file.csv", mode='overwrite', header=True, nullValue='NA', quoteAll=False)
 
-    # Read a CSV file into a dataframe
-    df = spark.read.csv("/tmp/file.csv", header=True, quote='"', escape='"')
+    # Read a CSV file into a dataframe (multiLine=True to avoid splitting data with '\n'
+    df = spark.read.csv("/tmp/file.csv", header=True, quote='"', escape='"', multiLine=True)
 
     # Print the Schema
     df.printSchema()
@@ -72,6 +103,10 @@ def main():
 
     # Display the data
     df.show()
+
+    # Count Total Number of records in csv files in a given path
+    path = '/tmp'
+    count_total(spark, path)
 
 
 if __name__ == '__main__':
