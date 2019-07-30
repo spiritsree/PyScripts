@@ -10,9 +10,8 @@ in environment
 import os
 import sys
 import json
-import pymysql.cursors
-from collections import OrderedDict
 import re
+import pymysql.cursors
 
 class ConfigContext:
     '''
@@ -28,8 +27,8 @@ class ConfigContext:
         self.db_password = self.environ_or_die('DB_PASSWORD')
         self.db_name = self.environ_or_die('DB_NAME')
 
-
-    def environ_or_die(self, env):
+    @classmethod
+    def environ_or_die(cls, env):
         '''
         Get the variable from environment or die
         '''
@@ -38,6 +37,16 @@ class ConfigContext:
         except:
             print('Missing {envvar} in environment.'.format(envvar=env))
             sys.exit(1)
+
+    @classmethod
+    def environ_or_none(cls, env):
+        '''
+        Get the variable from environment or none
+        '''
+        try:
+            return os.environ[env]
+        except:
+            return ''
 
 CONFIG = ConfigContext()
 
@@ -57,7 +66,7 @@ def get_schema(table_name):
         cursor.execute(sql)
         result = cursor.fetchall()
         for each_column in result:
-            table_schema.append((each_column['Field'],each_column['Type']))
+            table_schema.append((each_column['Field'], each_column['Type']))
 
     return table_schema
 
@@ -79,8 +88,8 @@ def get_tabes():
         result = cursor.fetchall()
         #result = cursor.fetchall_unbuffered()
         #connection.commit()
-        for t in result:
-            tables.append(t[0])
+        for t_data in result:
+            tables.append(t_data[0])
 
     return tables
 
@@ -101,6 +110,8 @@ def main():
             if re.match(r'.*?datetime.*?', column[1]):
                 config_json[CONFIG.db_name][t_name]['schema'][column[0]] = 'timestamp'
             elif re.match(r'.*?int.*?unsigned.*?', column[1]):
+                config_json[CONFIG.db_name][t_name]['schema'][column[0]] = 'long'
+            elif re.match(r'.*?bigint.*?', column[1]):
                 config_json[CONFIG.db_name][t_name]['schema'][column[0]] = 'long'
             elif re.match(r'.*?int.*?', column[1]):
                 config_json[CONFIG.db_name][t_name]['schema'][column[0]] = 'int'
