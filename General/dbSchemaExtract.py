@@ -12,6 +12,7 @@ import sys
 import json
 import re
 import pymysql.cursors
+import jsbeautifier
 
 class ConfigContext:
     '''
@@ -28,6 +29,16 @@ class ConfigContext:
         self.db_name = self.environ_or_die('DB_NAME')
 
     @classmethod
+    def environ_or_none(cls, env):
+        '''
+        Get the variable from environment or none
+        '''
+        try:
+            return os.environ[env]
+        except:
+            return ''
+
+    @classmethod
     def environ_or_die(cls, env):
         '''
         Get the variable from environment or die
@@ -37,16 +48,6 @@ class ConfigContext:
         except:
             print('Missing {envvar} in environment.'.format(envvar=env))
             sys.exit(1)
-
-    @classmethod
-    def environ_or_none(cls, env):
-        '''
-        Get the variable from environment or none
-        '''
-        try:
-            return os.environ[env]
-        except:
-            return ''
 
 CONFIG = ConfigContext()
 
@@ -130,7 +131,7 @@ def main():
             else:
                 config_json[CONFIG.db_name][t_name]['schema'][column[0]] = 'string'
 
-    print(json.dumps(config_json))
+    print(jsbeautifier.beautify(json.dumps(config_json)))
 
 if __name__ == '__main__':
     main()
