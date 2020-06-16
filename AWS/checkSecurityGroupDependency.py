@@ -5,9 +5,11 @@ This script is to check the dependency of a Security Group with other AWS resour
 
 Reuirements: boto3-1.9.71 or higher
 
-Supported resources: EC2, ELB, ALB, ElastiCache, RDS, Redshift, EMR, Security Groups, ENI
+Supported resources: EC2, ELB, ALB, ElastiCache, RDS, Redshift, EMR, Security Groups,
+                     ENI, Lambda, DMS, EFS, VPCE
 
 Usage: checkSecurityGroupDependency.py [-h] (--vpc_id VPC_ID | --sg_id SG_ID | --output [json|csv])
+
 '''
 import argparse
 import sys
@@ -114,16 +116,14 @@ def get_rds():
     rds_client = boto3.client('rds')
     # Check RDS DB security groups
     rds_sg_paginator = rds_client.get_paginator('describe_db_security_groups')
-    rds_sg_pages = rds_sg_paginator.paginate()
-    for rds_sg_page in rds_sg_pages:
+    for rds_sg_page in rds_sg_paginator.paginate():
         for rds_sg in rds_sg_page['DBSecurityGroups']:
             for ec2_sg in rds_sg['EC2SecurityGroups']:
                 if is_group_exist(ec2_sg['EC2SecurityGroupId'], 'RDS'):
                     RESOURCE_DATA[ec2_sg['EC2SecurityGroupId']]['RDS'].append(rds_sg['DBSecurityGroupName'])
     # Check RDS clusters
     rds_cluster_paginator = rds_client.get_paginator('describe_db_clusters')
-    rds_cluster_pages = rds_cluster_paginator.paginate()
-    for rds_cluster_page in rds_cluster_pages:
+    for rds_cluster_page in rds_cluster_paginator.paginate():
         for cluster in rds_cluster_page['DBClusters']:
             for s_group in cluster['VpcSecurityGroups']:
                 s_id = s_group['VpcSecurityGroupId']
@@ -131,8 +131,7 @@ def get_rds():
                     RESOURCE_DATA[s_id]['RDS'].append(cluster['DBClusterIdentifier'])
     # Check RDS instances
     rds_instance_paginator = rds_client.get_paginator('describe_db_instances')
-    rds_instance_pages = rds_instance_paginator.paginate()
-    for rds_instance_page in rds_instance_pages:
+    for rds_instance_page in rds_instance_paginator.paginate():
         for instance in rds_instance_page['DBInstances']:
             for s_group2 in instance['VpcSecurityGroups']:
                 s_id2 = s_group2['VpcSecurityGroupId']
@@ -230,6 +229,49 @@ def get_dms():
             if is_group_exist(s_id, 'DMS'):
                 RESOURCE_DATA[s_id]['DMS'].append(dms_instance['ReplicationInstanceIdentifier'])
 
+def get_efs():
+    '''
+    Collect EFS and associated SGs
+    '''
+    efs_fs = {}
+    efs_mt = {}
+    efs = boto3.client('efs')
+    efs_fs_paginator = efs.get_paginator('describe_file_systems')
+    efs_mt_paginator = efs.get_paginator('describe_mount_targets')
+    for fs_list in efs_fs_paginator.paginate():
+        for each_fs in fs_list['FileSystems']:
+            efs_fs[each_fs['FileSystemId']] = each_fs['Name']
+    for fs_id in efs_fs:
+        for mt_list in efs_mt_paginator.paginate(FileSystemId=fs_id):
+            for each_mt in mt_list['MountTargets']:
+                efs_mt[each_mt['MountTargetId']] = each_mt['FileSystemId']
+    for mt_id in efs_mt:
+        mt_sg_res = efs.describe_mount_target_security_groups(MountTargetId=mt_id)
+        for s_group in mt_sg_res['SecurityGroups']:
+            if is_group_exist(s_group, 'EFS'):
+                if efs_mt[mt_id] not in RESOURCE_DATA[s_group]['EFS']:
+                    RESOURCE_DATA[s_group]['EFS'].append(efs_mt[mt_id])
+
+def get_vpce(v_id):
+    '''
+    Collect VPCE and associated SGs
+    '''
+    vpce = boto3.client('ec2')
+    vpce_list = vpce.describe_vpc_endpoints(Filters=[
+        {
+            'Name': 'vpc-id',
+            'Values': [
+                v_id
+            ]
+        }
+    ])
+    for vpce in vpce_list['VpcEndpoints']:
+        for s_group in vpce['Groups']:
+            s_id = s_group['GroupId']
+            if is_group_exist(s_id, 'VPCE'):
+                if vpce['VpcEndpointId'] not in RESOURCE_DATA[s_id]['VPCE']:
+                    RESOURCE_DATA[s_id]['VPCE'].append(vpce['VpcEndpointId'])
+
 def get_sgs(v_id):
     '''
     Check if the SG is referenced in any other SGs
@@ -302,6 +344,8 @@ def get_reource_sg_mapping(v_id):
     get_enis(v_id)
     get_lambdas()
     get_dms()
+    get_efs()
+    get_vpce(v_id)
     get_sgs(v_id)
 
     return True
@@ -317,11 +361,10 @@ def csv_display():
         for aws_res in DATA_JSON[s_id]:
             if aws_res == 'Metadata':
                 continue
-            else:
-                if DATA_JSON[s_id][aws_res]:
-                    s_res += '- {0} : '.format(aws_res)
-                    s_res += ', '.join(DATA_JSON[s_id][aws_res])
-                    s_res += '\n'
+            if DATA_JSON[s_id][aws_res]:
+                s_res += '- {0} : '.format(aws_res)
+                s_res += ', '.join(DATA_JSON[s_id][aws_res])
+                s_res += '\n'
         print('{0},{1},{2},{3},{4},"{5}"'.format(
             s_id,
             DATA_JSON[s_id]['Metadata']['Name'],
